@@ -1,3 +1,5 @@
+#coding=gbk
+
 """
 Dianping Crawler 
 Author: smilexie1113@gmail.com
@@ -10,6 +12,12 @@ import requests
 import codecs 
 from bs4 import BeautifulSoup
 import time
+
+DianpingOption = {
+    'cityid': 14,
+    'locatecityid': 14,
+    'categoryid': 10
+}
 
 CrawlerOption = {
     'headder_host': 'm.api.dianping.com'
@@ -25,6 +33,7 @@ class DianpingRestaurant(object):
         
     def __str__(self):
         outstr = self._name + " " + self._branch_name + " " + self._price_text + " " + self._category;
+        #outstr = "%-20s %-20s %-10s %-15s" % (self._name, self._branch_name, self._price_text, self._category)
         return outstr
 
 class DianpingCrawler(object):
@@ -33,24 +42,36 @@ class DianpingCrawler(object):
         self._restaurant = []
         pass
     
+    def get_restaurant_list_all(self):
+        next_start = 0
+        last_start = -1
+        while next_start >= 0 and next_start > last_start:
+            last_start = next_start
+            next_start = self.get_restaurant_list(next_start)
+            if last_start > 1500:
+                break
+    
     def get_restaurant_list(self, start):
         sec_time = int(time.time())
         response = CrawlerCommon.get(r"http://m.api.dianping.com/searchshop.json?start=" + str(start) \
-                                     + "&range=-1&categoryid=10" \
-                                     + r"&sortid=0&locatecityid=14&cityid=14&_=" + str(sec_time))
+                                     + r"&range=-1&categoryid=" + str(DianpingOption['categoryid']) \
+                                     + r"&sortid=0&locatecityid=" + str(DianpingOption['locatecityid']) \
+                                     + r"&cityid=" + str(DianpingOption['cityid']) + r"&_=" + str(sec_time))
         json_dict = response.json()
         for list_node in json_dict["list"]:
             res = DianpingRestaurant(list_node["name"], list_node["branchName"], list_node["priceText"], \
                                 list_node["categoryName"])
             self._restaurant.append(res)
+        return json_dict["nextStartIndex"]
     
     def print_all_restaurant(self):
         for res in self._restaurant:
             print(res)
+        print("restaurant num " + str(len(self._restaurant)));
 
 class CrawlerCommon(object):
     _session = None
-    _last_get_page_fail = False #��һ�ε���get_page��ʧ�ܵ�?
+    _last_get_page_fail = False 
     _my_header = {
         'Connection': 'Keep-Alive',
         'Accept': 'text/html, application/xhtml+xml, */*',
@@ -111,7 +132,7 @@ def main():
     CrawlerCommon.session_init()
     
     dc = DianpingCrawler();
-    dc.get_restaurant_list(start = 0);
+    dc.get_restaurant_list_all()
     dc.print_all_restaurant()
     
     print("ok\n")
