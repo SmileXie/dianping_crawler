@@ -1,4 +1,4 @@
-#coding=gbk
+#coding=utf-8
 
 """
 Dianping Crawler 
@@ -19,22 +19,44 @@ DianpingOption = {
     'categoryid': 10
 }
 
-CrawlerOption = {
-    'headder_host': 'm.api.dianping.com'
-};
-
 class DianpingRestaurant(object):
     
-    def __init__(self, name, branch_name, price_text, category):
+    def __init__(self, id, name, shop_star, branch_name, price_text, category):
+        self._id = id
+        self._shop_star = shop_star
         self._name = name
         self._branch_name = branch_name
         self._price_text = price_text
         self._category = category
+        self._get_shop_page()
         
     def __str__(self):
-        outstr = self._name + " " + self._branch_name + " " + self._price_text + " " + self._category;
+        outstr = self._name + " " + self._branch_name + " " + self._price_text + " " + self._category + " " + str(self._taste) + \
+                    str(self._surroundings) + " " + str(self._service);
         #outstr = "%-20s %-20s %-10s %-15s" % (self._name, self._branch_name, self._price_text, self._category)
         return outstr
+
+    def _get_shop_page(self):
+        #CrawlerCommon.get_and_save_page(r"http://m.dianping.com/shop/" + str(self._id), "test.html")
+        response =  CrawlerCommon.get(r"http://m.dianping.com/shop/" + str(self._id))
+        soup = BeautifulSoup(response.text)
+        """
+        <div class="desc">
+            <span>口味:9.1</span>
+            <span>环境:8.5</span>
+            <span>服务:8.7</span>
+        </div>
+        """
+        desc_soup = soup.find("div", class_="desc")
+        for score_soup in desc_soup.findAll("span"):
+            if u"口味" in score_soup.contents[0]:
+                self._taste = float(score_soup.contents[0].split(":")[1])
+            elif u"环境" in score_soup.contents[0]:
+                self._surroundings = float(score_soup.contents[0].split(":")[1])
+            elif u"服务" in score_soup.contents[0]:
+                self._service = float(score_soup.contents[0].split(":")[1])
+        pass
+        
 
 class DianpingCrawler(object):
     
@@ -48,7 +70,7 @@ class DianpingCrawler(object):
         while next_start >= 0 and next_start > last_start:
             last_start = next_start
             next_start = self.get_restaurant_list(next_start)
-            if last_start > 1500:
+            if last_start > 100:
                 break
     
     def get_restaurant_list(self, start):
@@ -59,8 +81,8 @@ class DianpingCrawler(object):
                                      + r"&cityid=" + str(DianpingOption['cityid']) + r"&_=" + str(sec_time))
         json_dict = response.json()
         for list_node in json_dict["list"]:
-            res = DianpingRestaurant(list_node["name"], list_node["branchName"], list_node["priceText"], \
-                                list_node["categoryName"])
+            res = DianpingRestaurant(list_node["id"], list_node["name"], list_node["shopPower"], list_node["branchName"], \
+                                     list_node["priceText"], list_node["categoryName"])
             self._restaurant.append(res)
         return json_dict["nextStartIndex"]
     
@@ -68,6 +90,11 @@ class DianpingCrawler(object):
         for res in self._restaurant:
             print(res)
         print("restaurant num " + str(len(self._restaurant)));
+
+
+CrawlerOption = {
+    'headder_host': 'm.api.dianping.com'
+};
 
 class CrawlerCommon(object):
     _session = None
@@ -78,7 +105,7 @@ class CrawlerCommon(object):
         'Accept-Language': 'zh-CN,zh;q=0.8',
         'User-Agent': 'Mozilla/5.0 (Windows NT 6.3; WOW64; Trident/7.0; rv:11.0) like Gecko',
         'Accept-Encoding': 'gzip,deflate,sdch',
-        'Host': CrawlerOption['headder_host'],
+        #'Host': CrawlerOption['headder_host'],
         'DNT': '1'
     }
     
@@ -119,7 +146,7 @@ class CrawlerCommon(object):
                 
             try:
                 try_time += 1
-                response = CrawlerCommon.get_session().get(url, headers = CrawlerCommon._my_header, timeout = 30)
+                response = CrawlerCommon._session.get(url, headers = CrawlerCommon._my_header, timeout = 30)
                 return response
             except Exception as e:
                 print("fail to get " + url + " error info: " + str(e) + " try_time " + str(try_time))
