@@ -12,6 +12,7 @@ import requests
 import codecs 
 from bs4 import BeautifulSoup
 import time
+import re
 
 DianpingOption = {
     'cityid': 14,
@@ -27,16 +28,25 @@ class DianpingRestaurant(object):
         self._name = name
         self._branch_name = branch_name
         self._price_text = price_text
+        try:
+            self._price_num = int(re.findall(r'\d+', self._price_text)[0])
+        except Exception as e:
+            self._price_num = 0
+            
+        #self._price_num = int(str(filter(str.isdigit, self._price_text)))
         self._category = category
-        self._get_shop_page()
+        self._taste = 0
+        self._surroundings = 0
+        self._service = 0
+        self._analyse_shop_page()
         
     def __str__(self):
         outstr = self._name + " " + self._branch_name + " " + self._price_text + " " + self._category + " " + str(self._taste) + \
-                    str(self._surroundings) + " " + str(self._service);
+                    " " + str(self._surroundings) + " " + str(self._service);
         #outstr = "%-20s %-20s %-10s %-15s" % (self._name, self._branch_name, self._price_text, self._category)
         return outstr
 
-    def _get_shop_page(self):
+    def _analyse_shop_page(self):
         #CrawlerCommon.get_and_save_page(r"http://m.dianping.com/shop/" + str(self._id), "test.html")
         response =  CrawlerCommon.get(r"http://m.dianping.com/shop/" + str(self._id))
         soup = BeautifulSoup(response.text)
@@ -55,8 +65,7 @@ class DianpingRestaurant(object):
                 self._surroundings = float(score_soup.contents[0].split(":")[1])
             elif u"服务" in score_soup.contents[0]:
                 self._service = float(score_soup.contents[0].split(":")[1])
-        pass
-        
+                
 
 class DianpingCrawler(object):
     
@@ -70,7 +79,7 @@ class DianpingCrawler(object):
         while next_start >= 0 and next_start > last_start:
             last_start = next_start
             next_start = self.get_restaurant_list(next_start)
-            if last_start > 100:
+            if last_start > 300:
                 break
     
     def get_restaurant_list(self, start):
@@ -85,6 +94,9 @@ class DianpingCrawler(object):
                                      list_node["priceText"], list_node["categoryName"])
             self._restaurant.append(res)
         return json_dict["nextStartIndex"]
+    
+    def sorted_restaurants_by_price(self):
+        self._restaurant.sort(key=lambda x:(x._price_num), reverse=True)
     
     def print_all_restaurant(self):
         for res in self._restaurant:
@@ -160,6 +172,7 @@ def main():
     
     dc = DianpingCrawler();
     dc.get_restaurant_list_all()
+    dc.sorted_restaurants_by_price()
     dc.print_all_restaurant()
     
     print("ok\n")
