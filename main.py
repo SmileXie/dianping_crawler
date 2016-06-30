@@ -41,8 +41,9 @@ class DianpingRestaurant(object):
         self._analyse_shop_page()
         
     def __str__(self):
-        outstr = self._name + " " + self._branch_name + " " + self._price_text + " " + self._category + " " + str(self._taste) + \
-                    " " + str(self._surroundings) + " " + str(self._service);
+        outstr = self._name + " " + self._branch_name + " " + self._price_text + " " + self._category + \
+                    " " + str(self._taste) + " " + str(self._surroundings) + " " + str(self._service) + \
+                    " " + str(self._shop_star)
         #outstr = "%-20s %-20s %-10s %-15s" % (self._name, self._branch_name, self._price_text, self._category)
         return outstr
 
@@ -58,6 +59,9 @@ class DianpingRestaurant(object):
         </div>
         """
         desc_soup = soup.find("div", class_="desc")
+        if type(desc_soup) == None :
+            return;
+        
         for score_soup in desc_soup.findAll("span"):
             if u"口味" in score_soup.contents[0]:
                 self._taste = float(score_soup.contents[0].split(":")[1])
