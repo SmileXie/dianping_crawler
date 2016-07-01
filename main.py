@@ -19,27 +19,6 @@ DianpingOption = {
     'locatecityid': 14,
     'categoryid': 10
 }
-#coding=utf-8
-
-"""
-Dianping Crawler 
-Author: smilexie1113@gmail.com
-
-Dianping Crawler
-
-
-"""
-import requests
-import codecs 
-from bs4 import BeautifulSoup
-import time
-import re
-
-DianpingOption = {
-    'cityid': 14,
-    'locatecityid': 14,
-    'categoryid': 10
-}
 
 class DianpingRestaurant(object):
     
