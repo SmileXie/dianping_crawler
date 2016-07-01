@@ -19,6 +19,27 @@ DianpingOption = {
     'locatecityid': 14,
     'categoryid': 10
 }
+#coding=utf-8
+
+"""
+Dianping Crawler 
+Author: smilexie1113@gmail.com
+
+Dianping Crawler
+
+
+"""
+import requests
+import codecs 
+from bs4 import BeautifulSoup
+import time
+import re
+
+DianpingOption = {
+    'cityid': 14,
+    'locatecityid': 14,
+    'categoryid': 10
+}
 
 class DianpingRestaurant(object):
     
@@ -59,7 +80,8 @@ class DianpingRestaurant(object):
         </div>
         """
         desc_soup = soup.find("div", class_="desc")
-        if type(desc_soup) == None :
+        if desc_soup is None :
+            print("Fail to analyse shop " + str(self._id));
             return;
         
         for score_soup in desc_soup.findAll("span"):
@@ -70,7 +92,15 @@ class DianpingRestaurant(object):
             elif u"服务" in score_soup.contents[0]:
                 self._service = float(score_soup.contents[0].split(":")[1])
                 
+    def is_valid(self):
+        if self._taste == 0 or self._surroundings == 0 or self._service == 0:
+            return False
+        else:
+            return True
 
+    def has_star(self):
+        return self._shop_star != 0
+            
 class DianpingCrawler(object):
     
     def __init__(self):
@@ -96,7 +126,12 @@ class DianpingCrawler(object):
         for list_node in json_dict["list"]:
             res = DianpingRestaurant(list_node["id"], list_node["name"], list_node["shopPower"], list_node["branchName"], \
                                      list_node["priceText"], list_node["categoryName"])
-            self._restaurant.append(res)
+            
+            if res.is_valid() and res.has_star():
+                self._restaurant.append(res)
+            else:
+                print("skip restaurant " + list_node["name"] + " " + list_node["branchName"] + " id:" + str(list_node["id"]));
+                
         return json_dict["nextStartIndex"]
     
     def sorted_restaurants_by_price(self):
