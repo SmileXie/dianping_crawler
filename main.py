@@ -38,12 +38,15 @@ class DianpingRestaurant(object):
         self._taste = 0
         self._surroundings = 0
         self._service = 0
+        self._lat = 0
+        self._lng = 0
         self._analyse_shop_page()
+        self._analyse_map()
         
     def __str__(self):
-        outstr = self._name + " " + self._branch_name + " " + self._price_text + " " + self._category + \
+        outstr = "id: " + str(self._id) + " " + self._name + " " + self._branch_name + " " + self._price_text + " " + self._category + \
                     " " + str(self._taste) + " " + str(self._surroundings) + " " + str(self._service) + \
-                    " " + str(self._shop_star)
+                    " " + str(self._shop_star) + "position: " + str(self._lat) + " " + str(self._lng)
         #outstr = "%-20s %-20s %-10s %-15s" % (self._name, self._branch_name, self._price_text, self._category)
         return outstr
 
@@ -58,9 +61,17 @@ class DianpingRestaurant(object):
             <span>服务:8.7</span>
         </div>
         """
+        
+        self._valid = True
+        name_soup = soup.find("span", class_="shop-name")
+        if name_soup is None:
+            print("Fail to analyse shop " + str(self._id));
+            self._valid = False
+            return;
+        
         desc_soup = soup.find("div", class_="desc")
         if desc_soup is None :
-            print("Fail to analyse shop " + str(self._id));
+            print("Fail to analyse shop " + str(self._id) + r"'s score of tates, surroudings, and service.");
             return;
         
         for score_soup in desc_soup.findAll("span"):
@@ -71,11 +82,21 @@ class DianpingRestaurant(object):
             elif u"服务" in score_soup.contents[0]:
                 self._service = float(score_soup.contents[0].split(":")[1])
                 
+    def _analyse_map(self):
+        # todo: exception process
+        response =  CrawlerCommon.get(r"http://m.dianping.com/shop/" + str(self._id) + r"/map")
+        lines = response.text.splitlines()
+        #    lat:26.10688581119624, 按冒号拆分成子串后，把最后的逗号删除
+        for line in lines:
+            if r"lat:" in line:
+                lat_line = line.split(":")[1][:-1]
+                self._lat = float(lat_line)
+            elif r"lng:" in line:
+                lng_line = line.split(":")[1][:-1]
+                self._lng = float(lng_line)
+                
     def is_valid(self):
-        if self._taste == 0 or self._surroundings == 0 or self._service == 0:
-            return False
-        else:
-            return True
+        return self._valid
 
     def has_star(self):
         return self._shop_star != 0
@@ -91,11 +112,11 @@ class DianpingCrawler(object):
         last_start = -1
         while next_start >= 0 and next_start > last_start:
             last_start = next_start
-            next_start = self.get_restaurant_list(next_start)
+            next_start = self.parse_restaurant_list(next_start)
             if last_start > 300:
                 break
     
-    def get_restaurant_list(self, start):
+    def parse_restaurant_list(self, start):
         sec_time = int(time.time())
         response = CrawlerCommon.get(r"http://m.api.dianping.com/searchshop.json?start=" + str(start) \
                                      + r"&range=-1&categoryid=" + str(DianpingOption['categoryid']) \
