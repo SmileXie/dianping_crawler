@@ -83,18 +83,20 @@ class DianpingRestaurant(object):
                 self._service = float(score_soup.contents[0].split(":")[1])
                 
     def _analyse_map(self):
-        # todo: exception process
-        response =  CrawlerCommon.get(r"http://m.dianping.com/shop/" + str(self._id) + r"/map")
-        lines = response.text.splitlines()
-        #    lat:26.10688581119624, 按冒号拆分成子串后，把最后的逗号删除
-        for line in lines:
-            if r"lat:" in line:
-                lat_line = line.split(":")[1][:-1]
-                self._lat = float(lat_line)
-            elif r"lng:" in line:
-                lng_line = line.split(":")[1][:-1]
-                self._lng = float(lng_line)
-                
+        try:
+            response =  CrawlerCommon.get(r"http://m.dianping.com/shop/" + str(self._id) + r"/map")
+            lines = response.text.splitlines()
+            #    lat:26.10688581119624, 按冒号拆分成子串后，把最后的逗号删除
+            for line in lines:
+                if r"lat:" in line:
+                    lat_line = line.split(":")[1][:-1]
+                    self._lat = float(lat_line)
+                elif r"lng:" in line:
+                    lng_line = line.split(":")[1][:-1]
+                    self._lng = float(lng_line)
+        except Exception as ex:
+            print("fail to parse location of restanrant " + str(self._id))
+                    
     def is_valid(self):
         return self._valid
 
