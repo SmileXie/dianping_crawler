@@ -13,6 +13,7 @@ import codecs
 from bs4 import BeautifulSoup
 import time
 import re
+import mysql.connector
 
 DianpingOption = {
     'cityid': 14, #Fuzhou
@@ -113,6 +114,31 @@ class DianpingRestaurant(object):
     def has_star(self):
         return self._shop_star != 0
             
+            
+class DianpingDb(object):
+    
+    def __init__(self, db_name, tb_name):
+        conn = mysql.connector.connect(user='root', password='password')
+        self._cursor = conn.cursor()
+        self._db_name = db_name
+        self._cursor.execute('DROP DATABASE ' + db_name)
+        self._cursor.execute('CREATE DATABASE ' + db_name)
+        self._cursor.execute('USE ' + db_name)
+        self._cursor.execute('CREATE TABLE ' + tb_name + ' ' 
+                               +      '('
+                               +      'id int(32) primary key, '
+                               +      'name varchar(32),'
+                               +      'branch_name varchar(32),'
+                               +      'price int(5),'
+                               +      'category varchar(32),'
+                               +      'lng float(20, 14),'
+                               +      'lat float(20, 14),'
+                               +      'star float(2, 1)' 
+                               +      ')')
+        conn.commit()
+        self._cursor.close()
+        conn.close()
+
 class DianpingCrawler(object):
     
     def __init__(self):
@@ -225,7 +251,7 @@ class CrawlerCommon(object):
 def main():
     print("start.\n")
     CrawlerCommon.session_init()
-    
+    db = DianpingDb('DianpingRes', 'ResTable')
     dc = DianpingCrawler();
     dc.get_restaurant_list_all()
     dc.sorted_restaurants_by_price()
