@@ -113,15 +113,24 @@ class DianpingRestaurant(object):
 
     def has_star(self):
         return self._shop_star != 0
-            
+    
+    def get_db_format(self):
+        db_str = [str(self._id), self._name, self._branch_name, str(self._price_num), self._category, \
+                    str(self._lng), str(self._lat), str((float)(self._shop_star) / 10)]
+        return db_str
             
 class DianpingDb(object):
     
     def __init__(self, db_name, tb_name):
         conn = mysql.connector.connect(user='root', password='password')
+        self._conn = conn
         self._cursor = conn.cursor()
         self._db_name = db_name
-        self._cursor.execute('DROP DATABASE ' + db_name)
+        self._tb_name = tb_name
+        try:
+            self._cursor.execute('DROP DATABASE ' + db_name)
+        except Exception as ex:
+            print("Fail to drop database " + db_name)
         self._cursor.execute('CREATE DATABASE ' + db_name)
         self._cursor.execute('USE ' + db_name)
         self._cursor.execute('CREATE TABLE ' + tb_name + ' ' 
@@ -130,20 +139,34 @@ class DianpingDb(object):
                                +      'name varchar(32),'
                                +      'branch_name varchar(32),'
                                +      'price int(5),'
+                               +      'star float(2, 1),' 
                                +      'category varchar(32),'
-                               +      'lng float(20, 14),'
-                               +      'lat float(20, 14),'
-                               +      'star float(2, 1)' 
+                               +      'longitude float(20, 14),'
+                               +      'latitude float(20, 14)'                               
                                +      ')')
         conn.commit()
+        #self._cursor.close()
+        #conn.close()
+        
+    def insert_row(self, shop):
+        try:
+            self._cursor.execute('insert into ' + self._tb_name  + ' (id, name, branch_name, price, category, longitude, latitude, star) ' \
+                                #+ 'values (%d, %s, %s, %d, %s, %f, %f, %f)' \
+                                + 'values (%s, %s, %s, %s, %s, %s, %s, %s)' \
+                                , shop.get_db_format())
+            self._conn.commit()
+        except Exception as ex:
+            print("fail to insert row to database. " + " error info: " + str(ex))
+            
+    def close(self):
         self._cursor.close()
-        conn.close()
+        self._conn.close()
 
 class DianpingCrawler(object):
     
-    def __init__(self):
+    def __init__(self, db):
         self._restaurant = []
-        pass
+        self._db = db
     
     def get_restaurant_list_all(self):
         next_start = 0
@@ -172,6 +195,7 @@ class DianpingCrawler(object):
             
             if res.is_valid() and res.has_star():
                 self._restaurant.append(res)
+                self._db.insert_row(res)
             else:
                 print("skip restaurant " + list_node["name"] + " " + list_node["branchName"] + " id:" + str(list_node["id"]));
                 
@@ -252,10 +276,11 @@ def main():
     print("start.\n")
     CrawlerCommon.session_init()
     db = DianpingDb('DianpingRes', 'ResTable')
-    dc = DianpingCrawler();
+    dc = DianpingCrawler(db);
     dc.get_restaurant_list_all()
     dc.sorted_restaurants_by_price()
-    dc.print_all_restaurant()
+    db.close()
+    #dc.print_all_restaurant()
     
     print("ok\n")
 
