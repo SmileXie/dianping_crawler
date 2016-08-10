@@ -42,6 +42,7 @@ class DianpingRestaurant(object):
         self._service = 0
         self._lat = 0
         self._lng = 0
+        self._district = ""
         self._analyse_shop_page()
         self._analyse_map()
         
@@ -92,7 +93,12 @@ class DianpingRestaurant(object):
                 self._surroundings = float(score_soup.contents[0].split(":")[1])
             elif u"服务" in score_soup.contents[0]:
                 self._service = float(score_soup.contents[0].split(":")[1])
-                
+        
+        district_soup = soup.find("meta", property=r"og:description")
+        if district_soup is None:
+            return 
+        self._district = district_soup["content"].split(" ")[0]
+        
     def _analyse_map(self):
         try:
             response =  CrawlerCommon.get(self._get_shop_map_url())
@@ -116,7 +122,7 @@ class DianpingRestaurant(object):
     
     def get_db_format(self):
         db_str = [str(self._id), self._name, self._branch_name, str(self._price_num), self._category, \
-                    str(self._lng), str(self._lat), str((float)(self._shop_star) / 10)]
+                    str(self._lng), str(self._lat), str((float)(self._shop_star) / 10), self._district]
         return db_str
             
 class DianpingDb(object):
@@ -142,7 +148,8 @@ class DianpingDb(object):
                                +      'star float(2, 1),' 
                                +      'category varchar(32),'
                                +      'longitude float(20, 14),'
-                               +      'latitude float(20, 14)'                               
+                               +      'latitude float(20, 14),'    
+                               +      'district varchar(32)'
                                +      ')')
         conn.commit()
         #self._cursor.close()
@@ -150,9 +157,9 @@ class DianpingDb(object):
         
     def insert_row(self, shop):
         try:
-            self._cursor.execute('insert into ' + self._tb_name  + ' (id, name, branch_name, price, category, longitude, latitude, star) ' \
+            self._cursor.execute('insert into ' + self._tb_name  + ' (id, name, branch_name, price, category, longitude, latitude, star, district) ' \
                                 #+ 'values (%d, %s, %s, %d, %s, %f, %f, %f)' \
-                                + 'values (%s, %s, %s, %s, %s, %s, %s, %s)' \
+                                + 'values (%s, %s, %s, %s, %s, %s, %s, %s, %s)' \
                                 , shop.get_db_format())
             self._conn.commit()
         except Exception as ex:
