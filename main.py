@@ -19,7 +19,7 @@ DianpingOption = {
     'cityid': 14, #Fuzhou
     'locatecityid': 14, #Fuzhou
     'categoryid': 10, #food
-    'stop_threshold': 30 #if restaurant number go beyond this, stop crawling
+    'stop_threshold': 1000 #if restaurant number go beyond this, stop crawling
 }
 
 class DianpingRestaurant(object):
@@ -86,13 +86,18 @@ class DianpingRestaurant(object):
             print("Fail to analyse shop " + str(self._id) + r"'s score of tates, surroudings, and service.");
             return;
         
-        for score_soup in desc_soup.findAll("span"):
-            if u"口味" in score_soup.contents[0]:
-                self._taste = float(score_soup.contents[0].split(":")[1])
-            elif u"环境" in score_soup.contents[0]:
-                self._surroundings = float(score_soup.contents[0].split(":")[1])
-            elif u"服务" in score_soup.contents[0]:
-                self._service = float(score_soup.contents[0].split(":")[1])
+        try:
+            for score_soup in desc_soup.findAll("span"):
+                if u"口味" in score_soup.contents[0]:
+                    self._taste = float(score_soup.contents[0].split(":")[1])
+                elif u"环境" in score_soup.contents[0]:
+                    self._surroundings = float(score_soup.contents[0].split(":")[1])
+                elif u"服务" in score_soup.contents[0]:
+                    self._service = float(score_soup.contents[0].split(":")[1])
+        except Exception as ex:
+            print("Fail to analyse shop " + str(self._id) + r"'s score of tates, surroudings, and service. string: " \
+                + str(desc_soup))
+            return
         
         district_soup = soup.find("meta", property=r"og:description")
         if district_soup is None:
@@ -121,8 +126,9 @@ class DianpingRestaurant(object):
         return self._shop_star != 0
     
     def get_db_format(self):
-        db_str = [str(self._id), self._name, self._branch_name, str(self._price_num), self._category, \
-                    str(self._lng), str(self._lat), str((float)(self._shop_star) / 10), self._district]
+        db_str = [str(self._id), self._name, self._branch_name, str(self._price_num), str((float)(self._shop_star) / 10), \
+                    str(self._taste), str(self._surroundings), str(self._service), self._category, \
+                    str(self._lng), str(self._lat), self._district]
         return db_str
             
 class DianpingDb(object):
@@ -142,10 +148,13 @@ class DianpingDb(object):
         self._cursor.execute('CREATE TABLE ' + tb_name + ' ' 
                                +      '('
                                +      'id int(32) primary key, '
-                               +      'name varchar(32),'
-                               +      'branch_name varchar(32),'
+                               +      'name varchar(20),'
+                               +      'branch_name varchar(16),'
                                +      'price int(5),'
                                +      'star float(2, 1),' 
+                               +      'taste float(2, 1),'
+                               +      'surroundings float(2, 1),'
+                               +      'service float(2, 1),'
                                +      'category varchar(32),'
                                +      'longitude float(20, 14),'
                                +      'latitude float(20, 14),'    
@@ -157,13 +166,16 @@ class DianpingDb(object):
         
     def insert_row(self, shop):
         try:
-            self._cursor.execute('insert into ' + self._tb_name  + ' (id, name, branch_name, price, category, longitude, latitude, star, district) ' \
+            self._cursor.execute('insert into ' + self._tb_name  + ' (id, name, branch_name, price, ' \
+                                + 'star, taste, surroundings, service, category, longitude, latitude, district) ' \
                                 #+ 'values (%d, %s, %s, %d, %s, %f, %f, %f)' \
-                                + 'values (%s, %s, %s, %s, %s, %s, %s, %s, %s)' \
+                                + 'values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)' \
                                 , shop.get_db_format())
             self._conn.commit()
+            return True
         except Exception as ex:
             print("fail to insert row to database. " + " error info: " + str(ex))
+            return False
             
     def close(self):
         self._cursor.close()
@@ -181,6 +193,7 @@ class DianpingCrawler(object):
         while next_start >= 0 and next_start > last_start:
             last_start = next_start
             next_start = self.parse_restaurant_list(next_start)
+            print("collect restaurant num " + str(len(self._restaurant)))
             if last_start > DianpingOption["stop_threshold"]:
                 break
     
@@ -195,18 +208,23 @@ class DianpingCrawler(object):
     def parse_restaurant_list(self, start):
         
         response = CrawlerCommon.get(self._get_list_url(start))
-        json_dict = response.json()
-        for list_node in json_dict["list"]:
-            res = DianpingRestaurant(list_node["id"], list_node["name"], list_node["shopPower"], list_node["branchName"], \
-                                     list_node["priceText"], list_node["categoryName"])
-            
-            if res.is_valid() and res.has_star():
-                self._restaurant.append(res)
-                self._db.insert_row(res)
-            else:
-                print("skip restaurant " + list_node["name"] + " " + list_node["branchName"] + " id:" + str(list_node["id"]));
+        try:
+            json_dict = response.json()
+            for list_node in json_dict["list"]:
+                res = DianpingRestaurant(list_node["id"], list_node["name"], list_node["shopPower"], list_node["branchName"], \
+                                         list_node["priceText"], list_node["categoryName"])
                 
-        return json_dict["nextStartIndex"]
+                if res.is_valid() and res.has_star():
+                    if self._db.insert_row(res): #insert ok, return true, otherwise return false
+                        self._restaurant.append(res)
+                    
+                else:
+                    print("skip restaurant " + list_node["name"] + " " + list_node["branchName"] + " id:" + str(list_node["id"]));
+                    
+            return json_dict["nextStartIndex"]
+        except Exception as ex:
+            print("Fail to get list of shop, start index " + str(start))
+            return -1
     
     def sorted_restaurants_by_price(self):
         self._restaurant.sort(key=lambda x:(x._price_num), reverse=True)
@@ -285,7 +303,7 @@ def main():
     db = DianpingDb('DianpingRes', 'ResTable')
     dc = DianpingCrawler(db);
     dc.get_restaurant_list_all()
-    dc.sorted_restaurants_by_price()
+    #dc.sorted_restaurants_by_price()
     db.close()
     #dc.print_all_restaurant()
     
