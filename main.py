@@ -122,8 +122,8 @@ class DianpingRestaurant(object):
     def is_valid(self):
         return self._valid
 
-    def has_star(self):
-        return self._shop_star != 0
+    def is_reasonable_data(self):
+        return self._shop_star != 0 and self._price_num < 3000
     
     def get_db_format(self):
         db_str = [str(self._id), self._name, self._branch_name, str(self._price_num), str((float)(self._shop_star) / 10), \
@@ -214,7 +214,7 @@ class DianpingCrawler(object):
                 res = DianpingRestaurant(list_node["id"], list_node["name"], list_node["shopPower"], list_node["branchName"], \
                                          list_node["priceText"], list_node["categoryName"])
                 
-                if res.is_valid() and res.has_star():
+                if res.is_valid() and res.is_reasonable_data():
                     if self._db.insert_row(res): #insert ok, return true, otherwise return false
                         self._restaurant.append(res)
                     
