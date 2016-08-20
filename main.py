@@ -14,12 +14,15 @@ from bs4 import BeautifulSoup
 import time
 import re
 import mysql.connector
+from mysql.connector import errorcode
 
 DianpingOption = {
     'cityid': 14, #Fuzhou
     'locatecityid': 14, #Fuzhou
     'categoryid': 10, #food
-    'stop_threshold': 1000 #if restaurant number go beyond this, stop crawling
+    'stop_threshold': 800, #if restaurant number in one region go beyond this, stop crawling
+    'regionids': [98, 100, 99, 101, 27667, 4101, 27670, -986, -987, -984, -433, -983, -981] 
+    #鼓楼区 台江区 晋安区 仓山区 闽侯县 马尾区 闽清县 永泰县 平潭县 罗源县 福清 连江 长乐
 }
 
 class DianpingRestaurant(object):
@@ -172,11 +175,14 @@ class DianpingDb(object):
                                 + 'values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)' \
                                 , shop.get_db_format())
             self._conn.commit()
-            return True
+            return True        
         except Exception as ex:
-            print("fail to insert row to database. " + " error info: " + str(ex))
+            if ex.errno == errorcode.ER_DUP_ENTRY:
+                print(str(ex))  #重复添加，属正常逻辑
+            else:
+                print("fail to insert row to database. " + " error info: " + str(ex))
             return False
-            
+
     def close(self):
         self._cursor.close()
         self._conn.close()
@@ -188,26 +194,32 @@ class DianpingCrawler(object):
         self._db = db
     
     def get_restaurant_list_all(self):
+        for regionid in DianpingOption["regionids"]:
+            print(r"Crawl shop in region " + str(regionid) + r".")
+            self.get_restaurant_list_in_region(regionid)
+    
+    def get_restaurant_list_in_region(self, regionid):
         next_start = 0
         last_start = -1
         while next_start >= 0 and next_start > last_start:
             last_start = next_start
-            next_start = self.parse_restaurant_list(next_start)
+            next_start = self.parse_restaurant_list(next_start, regionid)
             print("collect restaurant num " + str(len(self._restaurant)))
-            if last_start > DianpingOption["stop_threshold"]:
+            if len(self._restaurant) > DianpingOption["stop_threshold"]:
+                print("Crawling in region " + str(regionid) + " has finished.")
                 break
     
-    def _get_list_url(self, start):
+    def _get_list_url(self, start, regionid):
         sec_time = int(time.time())
-        url = r"http://m.api.dianping.com/searchshop.json?start=" + str(start) \
-                 + r"&range=-1&categoryid=" + str(DianpingOption['categoryid']) \
+        url = r"http://m.api.dianping.com/searchshop.json?" + "&regionid=" + str(regionid) + "&start=" + str(start) \
+                 + r"&categoryid=" + str(DianpingOption['categoryid']) \
                  + r"&sortid=0&locatecityid=" + str(DianpingOption['locatecityid']) \
                  + r"&cityid=" + str(DianpingOption['cityid']) + r"&_=" + str(sec_time)
         return url
 
-    def parse_restaurant_list(self, start):
+    def parse_restaurant_list(self, start, regionid):
         
-        response = CrawlerCommon.get(self._get_list_url(start))
+        response = CrawlerCommon.get(self._get_list_url(start, regionid))
         try:
             json_dict = response.json()
             for list_node in json_dict["list"]:
@@ -223,7 +235,7 @@ class DianpingCrawler(object):
                     
             return json_dict["nextStartIndex"]
         except Exception as ex:
-            print("Fail to get list of shop, start index " + str(start))
+            print("Fail to get list of shop, start index " + str(start) + "region:" + str(regionid))
             return -1
     
     def sorted_restaurants_by_price(self):
