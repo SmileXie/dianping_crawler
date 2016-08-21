@@ -13,6 +13,8 @@ import codecs
 from bs4 import BeautifulSoup
 import time
 import re
+import os
+import sys
 import mysql.connector
 from mysql.connector import errorcode
 
@@ -21,8 +23,8 @@ DianpingOption = {
     'locatecityid': 14, #Fuzhou
     'categoryid': 10, #food
     'stop_threshold': 800, #if restaurant number in one region go beyond this, stop crawling
-    'regionids': [98, 100, 99, 101, 27667, 4101, 27670, -986, -987, -984, -433, -983, -981] 
-    #鼓楼区 台江区 晋安区 仓山区 闽侯县 马尾区 闽清县 永泰县 平潭县 罗源县 福清 连江 长乐
+    'regionids': [0, 98, 100, 99, 101, 27667, 4101, 27670, -986, -987, -984, -433, -983, -981] 
+    #全市 鼓楼区 台江区 晋安区 仓山区 闽侯县 马尾区 闽清县 永泰县 平潭县 罗源县 福清 连江 长乐
 }
 
 class DianpingRestaurant(object):
@@ -136,34 +138,38 @@ class DianpingRestaurant(object):
             
 class DianpingDb(object):
     
-    def __init__(self, db_name, tb_name):
+    def __init__(self, db_name, tb_name, is_create):
         conn = mysql.connector.connect(user='root', password='password')
         self._conn = conn
         self._cursor = conn.cursor()
         self._db_name = db_name
         self._tb_name = tb_name
-        try:
-            self._cursor.execute('DROP DATABASE ' + db_name)
-        except Exception as ex:
-            print("Fail to drop database " + db_name)
-        self._cursor.execute('CREATE DATABASE ' + db_name)
+        if is_create:
+            try:
+                self._cursor.execute('DROP DATABASE ' + db_name)
+            except Exception as ex:
+                print("Fail to drop database " + db_name)
+            self._cursor.execute('CREATE DATABASE ' + db_name)
+        
         self._cursor.execute('USE ' + db_name)
-        self._cursor.execute('CREATE TABLE ' + tb_name + ' ' 
-                               +      '('
-                               +      'id int(32) primary key, '
-                               +      'name varchar(20),'
-                               +      'branch_name varchar(16),'
-                               +      'price int(5),'
-                               +      'star float(2, 1),' 
-                               +      'taste float(2, 1),'
-                               +      'surroundings float(2, 1),'
-                               +      'service float(2, 1),'
-                               +      'category varchar(32),'
-                               +      'longitude float(20, 14),'
-                               +      'latitude float(20, 14),'    
-                               +      'district varchar(32)'
-                               +      ')')
-        conn.commit()
+        
+        if is_create:
+            self._cursor.execute('CREATE TABLE ' + tb_name + ' ' 
+                                   +      '('
+                                   +      'id int(32) primary key, '
+                                   +      'name varchar(20),'
+                                   +      'branch_name varchar(16),'
+                                   +      'price int(5),'
+                                   +      'star float(2, 1),' 
+                                   +      'taste float(2, 1),'
+                                   +      'surroundings float(2, 1),'
+                                   +      'service float(2, 1),'
+                                   +      'category varchar(32),'
+                                   +      'longitude float(20, 14),'
+                                   +      'latitude float(20, 14),'    
+                                   +      'district varchar(32)'
+                                   +      ')')
+            conn.commit()
         #self._cursor.close()
         #conn.close()
         
@@ -193,10 +199,9 @@ class DianpingCrawler(object):
         self._restaurant = []
         self._db = db
     
-    def get_restaurant_list_all(self):
-        for regionid in DianpingOption["regionids"]:
-            print(r"Crawl shop in region " + str(regionid) + r".")
-            self.get_restaurant_list_in_region(regionid)
+    def do_crawler(self, region_idx):
+        regionid = DianpingOption["regionids"][region_idx]
+        self.get_restaurant_list_in_region(regionid)
     
     def get_restaurant_list_in_region(self, regionid):
         next_start = 0
@@ -205,9 +210,10 @@ class DianpingCrawler(object):
             last_start = next_start
             next_start = self.parse_restaurant_list(next_start, regionid)
             print("collect restaurant num " + str(len(self._restaurant)))
-            if len(self._restaurant) > DianpingOption["stop_threshold"]:
-                print("Crawling in region " + str(regionid) + " has finished.")
+            if next_start > DianpingOption["stop_threshold"]:
+                print("restaurant number in one region go beyond the threshold.")
                 break
+        print("Crawling in region " + str(regionid) + " has finished.")
     
     def _get_list_url(self, start, regionid):
         sec_time = int(time.time())
@@ -218,8 +224,8 @@ class DianpingCrawler(object):
         return url
 
     def parse_restaurant_list(self, start, regionid):
-        
-        response = CrawlerCommon.get(self._get_list_url(start, regionid))
+        url = self._get_list_url(start, regionid)
+        response = CrawlerCommon.get(url)
         try:
             json_dict = response.json()
             for list_node in json_dict["list"]:
@@ -235,7 +241,9 @@ class DianpingCrawler(object):
                     
             return json_dict["nextStartIndex"]
         except Exception as ex:
-            print("Fail to get list of shop, start index " + str(start) + "region:" + str(regionid))
+            self._dump_page('page_'+ str(start) + '_' + str(regionid) +'.json', response.text, response.encoding)
+            print("Fail to get list of shop, start index " + str(start) + " region:" + str(regionid) + " ERR info:" + str(ex) \
+                + " url: " + url)
             return -1
     
     def sorted_restaurants_by_price(self):
@@ -246,7 +254,10 @@ class DianpingCrawler(object):
             print(res)
         print("restaurant num " + str(len(self._restaurant)));
 
-
+    def _dump_page(self, path, str_content, encoding):
+        with codecs.open(path, 'w', encoding)  as fp:
+            fp.write(str_content)
+        
 CrawlerOption = {
     'headder_host': 'm.api.dianping.com'
 };
@@ -310,17 +321,26 @@ class CrawlerCommon(object):
             raise
     
 def main():
-    print("start.\n")
+
+    #参数是爬取的地区的下标 DianpingOption["regionids"]
+    #启动不同进程来爬取不同地区，是为了避免被防爬虫机制禁用
+    if len(sys.argv) > 1 :
+        region_idx = int(sys.argv[1])
+    else:
+        region_idx = 0
+       
+    print("Region index " + str(region_idx) + " start crawling.\n")
+    
     CrawlerCommon.session_init()
-    db = DianpingDb('DianpingRes', 'ResTable')
+    db = DianpingDb('DianpingRes', 'ResTable', region_idx == 0)
     dc = DianpingCrawler(db);
-    dc.get_restaurant_list_all()
+    dc.do_crawler(region_idx)
     #dc.sorted_restaurants_by_price()
     db.close()
     #dc.print_all_restaurant()
     
-    print("ok\n")
-
+    print("Region index " + str(region_idx) + " crawling ok\n")
+    
 
 if __name__ == "__main__":    
     main()
